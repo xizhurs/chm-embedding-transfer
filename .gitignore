@@ -1,0 +1,25 @@
+# Python / environment
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Data: lidar CHMs, downloaded S1/S2/AlphaEarth/Tessera rasters, targets and feature tables (GBs, regenerable)
+data/
+
+# GDAL side-car files
+*.aux.xml
+
+# Results: keep summaries, metrics and figures; drop bulky or transient files
+results/logs/
+results/**/predictions_*.parquet
+results/**/*.pkl
+results/**/*.tmp
+results/**/*.parquet.tmp
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

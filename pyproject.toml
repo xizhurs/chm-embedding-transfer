@@ -1,0 +1,35 @@
+[project]
+name = "hgt"
+version = "0.1.0"
+description = "Canopy height (P98 @100 m) from Sentinel-1/2 handcrafted features vs AlphaEarth embeddings"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "pyyaml",
+    "rasterio",
+    "pyproj",
+    "shapely",
+    "geopandas",
+    "xarray",
+    "rioxarray",
+    "dask",
+    "pystac-client",
+    "planetary-computer",
+    "odc-stac",
+    "scikit-learn",
+    "scikit-image",
+    "matplotlib",
+    "xgboost>=3.2.0",
+    "icechunk>=1.1.21",
+    "numcodecs[pcodec]>=0.16.5",
+    "tabicl>=2.2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hgt"]

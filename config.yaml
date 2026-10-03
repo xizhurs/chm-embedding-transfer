@@ -1,0 +1,96 @@
+# Single source of truth for sites, years, grids, paths and seeds.
+# Grid extents = union of all lidar footprints per site, snapped outward to 1 km,
+# so 100 m cells, 10 m pixels and 1 km blocks all nest exactly.
+
+sites:
+  colombia:
+    crs: "EPSG:32618"
+    aef_zone: "18N"
+    grid_bounds: [415000, 581000, 426000, 594000]   # minx, miny, maxx, maxy (m)
+    years:
+      2021: data/Colombia/clusterplot_0_chm_0.5m_2021.tif
+      2022: data/Colombia/clusterplot_0_chm_0.5m_2022.tif
+  tanzania:
+    crs: "EPSG:32736"
+    aef_zone: "36S"
+    grid_bounds: [295000, 9824000, 299000, 9836000]
+    years:
+      2022: data/Tanzania/clusterplot_0_chm_0.5m_2022.tif
+      2024: data/Tanzania/clusterplot_0_chm_0.5m_2024.tif
+
+grid:
+  feature_res: 10       # m, S1/S2/AEF rasters
+  cell_res: 100         # m, target / modelling unit
+  block_size: 1000      # m, spatial CV block
+
+target:
+  percentile: 95
+  min_valid_frac: 0.5
+
+s2:
+  collection: sentinel-2-l2a
+  bands: [B02, B03, B04, B05, B06, B07, B08, B8A, B11, B12]
+  scl_keep: [4, 5, 6, 7]
+  max_cloud_cover: 80          # scene-level pre-filter (%)
+  indices: [NDVI, EVI, NDMI, NBR, NDRE]
+  index_percentiles: [10, 50, 90]
+
+s1:
+  collection: sentinel-1-rtc
+  orbit_state: descending
+  platform: sentinel-1a
+  bands: [vv, vh]
+
+aef:
+  root: s3://us-west-2.opendata.source.coop/tge-labs/aef/v1/annual
+  https_root: https://data.source.coop/tge-labs/aef/v1/annual
+  index: https://data.source.coop/tge-labs/aef/v1/annual/aef_index.parquet
+  nodata: -128
+  n_bands: 64
+
+glcm:
+  inputs: [s2_B08_median, s2_NDVI_p50, s1_vv_db_median, s1_vh_db_median]
+  levels: 16
+  distance: 1
+  props: [contrast, dissimilarity, homogeneity, ASM, correlation, entropy]
+  # Fixed global quantisation ranges (shared by all site-years).
+  ranges:
+    s2_B08_median: [0.0, 0.7]
+    s2_NDVI_p50: [-0.2, 1.0]
+    s1_vv_db_median: [-25.0, 5.0]
+    s1_vh_db_median: [-30.0, -5.0]
+
+model:
+  learner: tabicl          # xgboost | plsr | tabicl  (outputs go to results/{learner}/)
+  # XGBoost, fixed hyper-parameters (no tuning), identical for every feature set
+  n_estimators: 200
+  learning_rate: 0.1
+  max_depth: 6
+  subsample: 0.8
+  colsample_bytree: 0.8
+  n_folds: 5
+  n_repeats: 1
+  seed: 42
+
+pipeline:
+  buffer_cells: 1          # training cells within this many cells of a fold's test blocks are dropped
+  cells: covered           # covered = only cells with Tessera data (identical cells for every FS); all = every cell
+  feature_selection:
+    method: shap_mean      # none | shap_mean | shap_topk  (score = mean |SHAP| of a selector XGBoost, fitted
+                           #   inside each training fold; shap_mean keeps features scoring above the mean score)
+    k: 30                  # only used by shap_topk
+    max_rows: 3000         # training rows used to compute SHAP
+
+tabicl:
+  n_estimators: 4          # TabICL ensemble size (default 8; pilot: 4 as accurate as 8 at half the time)
+  batch_size: 1            # ensemble members processed at once (default 8; 1 = lowest memory)
+  offload_mode: disk       # column-embedding tensor memory-mapped to disk (CPU-only machine, little RAM)
+  disk_offload_dir: "%TEMP%/tabicl_offload"   # outside OneDrive
+
+plsr:
+  n_components: 5          # PLS components (capped at n_features / n_samples - 1)
+  scale: true              # standardise features inside PLS
+
+fewshot:
+  k_blocks: [1, 2, 5, 10, 20]
+  n_draws: 3
