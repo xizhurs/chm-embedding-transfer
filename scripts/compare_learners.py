@@ -58,11 +58,14 @@ def main() -> None:
     for n, d in m.items():
         p = pooled(d, "E3")
         if not p.empty:
-            e3[n] = p.groupby(["variant", "k", "feature_set"])["r2"].mean()
+            e3[n] = p.groupby(["variant", "k", "feature_set", "draw"])["r2"].mean()
     if len(e3) == 2:
-        j = pd.concat(e3, axis=1).dropna().reset_index()
+        # paired: only (variant, k, FS, draw) combinations run by both learners (same shot blocks)
+        j = pd.concat(e3, axis=1).dropna()
+        n_draws = j.reset_index()["draw"].nunique()
+        j = j.groupby(level=["variant", "k", "feature_set"]).mean().reset_index()
         j["Δ"] = j[B] - j[A]
-        lines += ["## E3 few-shot R² (mean over draws)", "", md_table(j), ""]
+        lines += [f"## E3 few-shot R² (mean over the {n_draws} draw(s) run by both learners)", "", md_table(j), ""]
 
     # E4 temporal loss = baseline (B->B) - cross-year (A->B)
     rows = []

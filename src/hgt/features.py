@@ -18,6 +18,7 @@ Usage:
   uv run python -m hgt.features                       # all site-years
   uv run python -m hgt.features --site colombia --year 2022 [--overwrite]
   uv run python -m hgt.features --check               # QA report on the written tables
+  uv run python -m hgt.features --maps                # feature tables for ALL grid cells (maps)
 """
 import argparse
 import time
@@ -30,7 +31,7 @@ from skimage.feature import graycomatrix, graycoprops
 
 from hgt.config import load_config, site_years
 from hgt.grid import get_grid
-from hgt.io import check_on_grid, raw_path, read_feature_raster, table_path, target_path
+from hgt.io import check_on_grid, map_table_path, raw_path, read_feature_raster, table_path, target_path
 
 ANGLES = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4]
 EMB_CHUNK = 16     # bands per read, keeps an embedding stack under ~100 MB at a time
@@ -144,9 +145,29 @@ def embedding_features(kind: str, prefix: str, site: str, year: int, rows, cols,
 
 
 def build_table(site: str, year: int) -> tuple[pd.DataFrame, dict]:
+    """Target table (lidar cells) + features."""
+    df = pd.read_parquet(target_path(site, year)).sort_values("cell_id").reset_index(drop=True)
+    return build_features(site, year, df)
+
+
+def build_map_table(site: str, year: int) -> pd.DataFrame:
+    """All 100 m cells of the site grid + features (for wall-to-wall maps). Cells without
+    Tessera data keep NaN tes_* features; S1, S2 and AEF cover the whole grid."""
+    cells = get_grid(site).cell_table()
+    out, _ = build_features(site, year, cells)
+    # the shared feature code must give identical values for the lidar cells
+    if table_path(site, year).exists():
+        tab = pd.read_parquet(table_path(site, year))
+        feat = [c for c in tab.columns if c.startswith(("hc_", "aef_", "tes_"))]
+        a = out.set_index("cell_id").loc[tab["cell_id"], feat].to_numpy()
+        assert np.array_equal(a, tab[feat].to_numpy(), equal_nan=True), "map features differ from table"
+    return out
+
+
+def build_features(site: str, year: int, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Feature columns for the cells of df (needs row/col on the 100 m grid), appended to df."""
     grid = get_grid(site)
     px = grid.px_per_cell
-    df = pd.read_parquet(target_path(site, year)).sort_values("cell_id").reset_index(drop=True)
     rows, cols = df["row"].to_numpy(), df["col"].to_numpy()
 
     feats, glcm_bands = {}, {}
@@ -189,6 +210,22 @@ def run(site: str, year: int, overwrite: bool = False) -> None:
         print(f"  GLCM {st['input']:16s} clipped low {st['pct_low']:6.2f}%  high {st['pct_high']:6.2f}%  "
               f"uniform cells {st['n_uniform']}  all-NaN {st['n_all_nan']}  "
               f"NaN-filled {st['n_nan_filled']}{flag}")
+
+
+def run_map(site: str, year: int, overwrite: bool = False) -> None:
+    path = map_table_path(site, year)
+    if path.exists() and not overwrite:
+        print(f"{site} {year}: {path} exists, skipping (use --overwrite)")
+        return
+    t0 = time.time()
+    df = build_map_table(site, year)
+    tmp = path.with_suffix(".parquet.tmp")
+    df.to_parquet(tmp, index=False)
+    tmp.replace(path)
+    tes = [c for c in df.columns if c.startswith("tes_")]
+    print(f"{site} {year}: map table {len(df)} cells x {df.shape[1]} cols -> {path} "
+          f"({time.time() - t0:.0f} s); cells without Tessera "
+          f"{100 * df[tes].isna().all(axis=1).mean():.1f}%; lidar-cell features identical to the table")
 
 
 # --- QA ----------------------------------------------------------------------
@@ -271,6 +308,8 @@ def main() -> None:
     ap.add_argument("--year", type=int)
     ap.add_argument("--overwrite", action="store_true")
     ap.add_argument("--check", action="store_true", help="only print the QA report")
+    ap.add_argument("--maps", action="store_true",
+                    help="build map tables (all grid cells) instead of lidar-cell tables")
     args = ap.parse_args()
     if args.check:
         check()
@@ -280,7 +319,10 @@ def main() -> None:
             continue
         if args.year and year != args.year:
             continue
-        run(site, year, args.overwrite)
+        if args.maps:
+            run_map(site, year, args.overwrite)
+        else:
+            run(site, year, args.overwrite)
 
 
 if __name__ == "__main__":

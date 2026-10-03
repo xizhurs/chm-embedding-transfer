@@ -67,3 +67,13 @@ All stage-3 outputs go to `hgt.io.experiment_dir()` = `results/{model.learner}/`
   XGBoost-SHAP selector for every learner).
 - `results/learner_comparison.md` (`scripts/compare_learners.py`): paired comparison of two learners.
 - Archives of earlier runs: `results/archive_*/` (each with a README).
+
+### 4 — Maps / inference (`src/hgt/features.py --maps`, `src/hgt/inference.py`)
+- `data/tables/map_{site}_{year}.parquet` (`hgt.io.map_table_path`): ALL 100 m cells of the site grid
+  (`grid.cell_table()`) with the same feature columns as the lidar tables (identical values on lidar cells,
+  asserted at build time); `tes_*` are NaN where Tessera has no data.
+- `results/{learner}/maps/{site}_{year}.tif` (`hgt.io.write_cell_raster`): float32 on the 100 m cell grid,
+  bands `lidar_p95` (observed, NaN outside the footprint), `pred_{FS}` (model trained on all covered lidar
+  cells of that site-year, predictions clipped at 0 m; NaN where the FS features are incomplete).
+- `results/{learner}/maps/{site}_{year}.png` and `maps_meta.csv` (training cells, selected features,
+  predicted cells, in-sample R² as a sanity check only).
