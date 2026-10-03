@@ -61,7 +61,7 @@ glcm:
     s1_vh_db_median: [-30.0, -5.0]
 
 model:
-  learner: tabicl          # xgboost | plsr | tabicl  (outputs go to results/{learner}/)
+  learner: xgboost         # xgboost | plsr | tabicl  (outputs go to results/{learner}/)
   # XGBoost, fixed hyper-parameters (no tuning), identical for every feature set
   n_estimators: 200
   learning_rate: 0.1

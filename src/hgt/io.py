@@ -28,6 +28,11 @@ def table_path(site: str, year: int) -> Path:
     return ROOT / "data" / "tables" / f"{site}_{year}.parquet"
 
 
+def map_table_path(site: str, year: int) -> Path:
+    """Feature table for ALL 100 m cells of the site grid (inference / mapping)."""
+    return ROOT / "data" / "tables" / f"map_{site}_{year}.parquet"
+
+
 def results_dir() -> Path:
     return ROOT / "results"
 
@@ -52,6 +57,24 @@ def write_feature_raster(path: Path, data: np.ndarray, band_names: list[str],
                    transform=grid.feature_transform, nodata=nodata,
                    compress="deflate", predictor=3, tiled=True,
                    blockxsize=256, blockysize=256, BIGTIFF="IF_SAFER")
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(data)
+        for i, name in enumerate(band_names, start=1):
+            dst.set_band_description(i, name)
+
+
+def write_cell_raster(path: Path, data: np.ndarray, band_names: list[str],
+                      grid: SiteGrid, nodata: float = np.nan) -> None:
+    """Write a (bands, H, W) float32 stack on the site's 100 m cell grid (maps)."""
+    data = np.asarray(data, dtype="float32")
+    if data.ndim == 2:
+        data = data[None]
+    assert data.shape[1:] == grid.cell_shape, (data.shape, grid.cell_shape)
+    assert len(band_names) == data.shape[0]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    profile = dict(driver="GTiff", dtype="float32", count=data.shape[0],
+                   height=data.shape[1], width=data.shape[2], crs=grid.crs,
+                   transform=grid.cell_transform, nodata=nodata, compress="deflate", predictor=3)
     with rasterio.open(path, "w", **profile) as dst:
         dst.write(data)
         for i, name in enumerate(band_names, start=1):

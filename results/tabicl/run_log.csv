@@ -1,0 +1,6 @@
+time,experiment,n_estimators,n_repeats,n_draws,quick,feature_sets,cells,learner,buffer_cells,selection
+2026-10-03 09:07:57,E1,200,1,-1,False,HC|AEF,covered,tabicl,1,shap_mean
+2026-10-03 09:12:13,E2,200,1,-1,False,HC|AEF,covered,tabicl,1,shap_mean
+2026-10-03 10:14:35,E4,200,1,-1,False,HC|AEF,covered,tabicl,1,shap_mean
+2026-10-03 10:28:09,E4matched,200,1,-1,False,HC|AEF,covered,tabicl,1,shap_mean
+2026-10-03 11:02:21,E3,200,1,1,False,HC|AEF,covered,tabicl,1,shap_mean
