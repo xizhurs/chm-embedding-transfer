@@ -2,6 +2,7 @@
 
   E1  in-domain blocked CV, per site-year
   E2  cross-country: train all Tanzania 2022 -> test all Colombia 2022
+  E2rev  the reverse: train all Colombia 2022 -> test all Tanzania 2022 (not part of `--exp all`)
   E3  few-shot recovery in Colombia 2022: Tanzania 2022 + k Colombia blocks (tz+k) and k blocks only (k-only)
   E4  cross-year within a site, one block partition shared by both years
       (E4matched: Colombia only, both years trained/tested on the same shared cells)
@@ -16,7 +17,7 @@ Outputs (results/):
   importances_E1.csv          top-20 gain importances per site-year / FS (repeat 0, mean over folds)
 
 Usage:
-  uv run python -m hgt.experiments --exp E1|E2|E3|E4|E4matched|all [--quick] [--n-draws N] [--repeats N]
+  uv run python -m hgt.experiments --exp E1|E2|E2rev|E3|E4|E4matched|all [--quick] [--n-draws N] [--repeats N]
 """
 import argparse
 import pickle
@@ -320,6 +321,28 @@ def run_e2(n_estimators: int, n_repeats: int) -> None:
     write_merged(pd.concat(preds), experiment_dir() / "predictions_E2.parquet", "fs")
 
 
+# --- E2rev ---------------------------------------------------------------------
+def run_e2rev(n_estimators: int, n_repeats: int) -> None:
+    """E2 in the other direction: train all Colombia 2022 -> test all Tanzania 2022. Pooled only."""
+    seed = load_config()["model"]["seed"]
+    co, tz = cell_subset(load_table(*E2_TEST)), cell_subset(load_table(*E2_TRAIN))
+    tr_name, te_name = name(*E2_TEST), name(*E2_TRAIN)
+    rows, preds = [], []
+    for r in range(n_repeats):
+        for fs in ACTIVE_FS:
+            X_co, y_co = xy(co, fs)
+            X_tz, y_tz = xy(tz, fs)
+            pred = make_model(n_estimators, seed + r).fit(X_co, y_co).predict(X_tz)
+            add_metrics(rows, y_tz, pred, experiment="E2rev", train=tr_name, test=te_name,
+                        feature_set=fs, repeat=r, fold=-1)
+            preds.append(pd.DataFrame({
+                "cell_id": tz["cell_id"].to_numpy(), "site": E2_TRAIN[0], "year": E2_TRAIN[1],
+                "obs": y_tz, "pred": pred, "fs": fs, "repeat": r, "fold": -1}))
+            log(f"E2rev r{r} {fs}: R2={r2_score(y_tz, pred):.3f} bias={np.mean(pred - y_tz):.2f} m")
+    write_metrics("E2rev", rows)
+    write_merged(pd.concat(preds), experiment_dir() / "predictions_E2rev.parquet", "fs")
+
+
 # --- E3 ------------------------------------------------------------------------
 def e3_fit(X_tz, y_tz, X_co, y_co, train_mask, test_mask, variant, n_estimators, rf_seed):
     """Fit one E3 model and return predictions on the test rows."""
@@ -565,7 +588,7 @@ def run_e4_matched(n_estimators: int, n_repeats: int) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--exp", required=True, choices=["E1", "E2", "E3", "E4", "E4matched", "all"])
+    ap.add_argument("--exp", required=True, choices=["E1", "E2", "E2rev", "E3", "E4", "E4matched", "all"])
     ap.add_argument("--quick", action="store_true", help="smoke test: 50 boosting rounds, 1 repeat, 2 draws")
     ap.add_argument("--n-draws", type=int, default=None, help="override fewshot.n_draws for E3")
     ap.add_argument("--repeats", type=int, default=None, help="override model.n_repeats")
@@ -603,6 +626,8 @@ def main() -> None:
             run_e1(n_estimators, n_repeats)
         elif exp == "E2":
             run_e2(n_estimators, n_repeats)
+        elif exp == "E2rev":
+            run_e2rev(n_estimators, n_repeats)
         elif exp == "E3":
             run_e3(n_estimators, n_draws, check_runtime)
         elif exp == "E4":
