@@ -54,6 +54,18 @@ Both fail, and AEF fails worse. The cause is the target range: Tanzania 2022 hei
 percentile of 15.2 m, while Colombia 2022 has a mean of 17.8 m. 66 % of Colombian cells are above the Tanzanian P95.
 Tree ensembles can't predict above the range they were trained on, so the error is dominated by a large negative bias.
 
+**E2rev, the reverse direction (train Colombia 2022, test Tanzania 2022):**
+
+| | in-domain R² (E1, Tanzania 2022) | transfer R² (E2rev) | RMSE (m) | bias (m) |
+|---|---|---|---|---|
+| HC | 0.64 | −2.33 | 7.23 | +5.7 |
+| AEF | 0.72 | −8.32 | 12.10 | +11.4 |
+
+It fails too, now with a large positive bias (overestimation), and again AEF is worse. Tanzanian heights are inside the
+Colombian training range, so this isn't an extrapolation limit. R² is not comparable between the two directions because
+Tanzania's height variance is much smaller; compare RMSE and bias instead. The AEF bias of +11.4 m puts its mean
+prediction near 19 m for a site that averages 7.4 m, close to Colombia's own mean.
+
 ### E3: few-shot recovery in Colombia 2022 (R² at k Colombia blocks)
 
 | k | HC tz+k | HC k-only | AEF tz+k | AEF k-only |
@@ -85,7 +97,8 @@ AEF is level with HC in Colombia and well behind it in Tanzania.
 ### Takeaways
 
 - AEF beats HC in-domain, but that gain does not carry over to either kind of transfer.
-- Geographic transfer between these two sites fails for both feature sets, mainly because of the height-range shift.
+- Geographic transfer between these two sites fails for both feature sets in both directions. Tanzania → Colombia is
+  dominated by the height-range shift, and Colombia → Tanzania by a large overestimate.
 - Temporal transfer is where AEF is weakest. The Tanzania gap is 2 years and the Colombia gap is 1 year.
 
 ## Caveats
@@ -136,6 +149,7 @@ uv run python -m hgt.download_tessera           # only needed for the TES featur
 uv run python -m hgt.targets
 uv run python -m hgt.features
 uv run python -m hgt.experiments --exp all --fs HC AEF   # or E1 | E2 | E3 | E4 | E4matched; --quick for a smoke test
+uv run python -m hgt.experiments --exp E2rev --fs HC AEF  # reverse E2; not in `all`, and not yet in report.py / summary.md
 uv run python -m hgt.report
 uv run python -m hgt.features --maps && uv run python -m hgt.inference --fs HC AEF
 uv run pytest -q
