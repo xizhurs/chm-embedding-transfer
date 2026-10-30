@@ -96,6 +96,52 @@ R² when k Colombia blocks are used. `tz+k` is Tanzania 2022 plus k Colombia blo
 Tanzania data mainly helps at k ≤ 2. From k = 5 on, local data alone does about as well. In-domain R² (E1, repeat 0)
 is 0.47 for HC and 0.49 for AEF. Three draws per k, repeat 0 only.
 
+### Year-to-year embedding shift on height-stable cells
+
+Where canopy height did not change (|Δh| ≤ 1 m between the two lidar years), any change in the AEF embedding is
+nuisance (season, weather, composite differences). `scripts/stable_shift.py` measures it and
+`scripts/e4_shift_correction.py` tests corrections inside the E4 setup (AEF, same folds, buffer and seeds).
+
+**Shift on stable cells (cell means, 100 m)**
+
+| | Tanzania 2022→2024 | Colombia 2021→2022 |
+|---|---|---|
+| Stable / paired cells | 1,543 / 2,136 | 1,615 / 2,198 |
+| Shift energy vs within-year embedding variance | 0.086 vs 0.059 | 0.046 vs 0.190 |
+| Share of the shift that is one constant vector | 80 % | 50 % |
+| Block-CV R² of the centred shift from the starting embedding | 0.28 | 0.47 |
+
+In Tanzania the shift is larger than the whole spatial variation of the embeddings and is mostly a single translation.
+In Colombia it is smaller and depends more on where a cell sits in embedding space. Across cells the shift points the
+same way everywhere (Tanzania cosine with the mean shift ≥ 0.81 for 95 % of cells), so there is no separate population of
+non-shifting cells. Across dimensions it is concentrated: in Tanzania 8 of 64 dimensions hold 50 % of the squared mean
+shift and 20 hold 80 %.
+
+**E4 with corrections** (pooled out-of-fold R², AEF). The mean shift is estimated on training-block cells of both years
+only; it is subtracted from the test-year `aef_*_mean` columns. `offset` uses stable cells, `offset_all` all paired cells
+(no heights). `drop-k` removes the k most-shifting dimensions from training and test.
+
+| | baseline | offset | offset_all | drop-k (best of 8/20/32) | in-year ceiling |
+|---|---|---|---|---|
+| Tanzania 2022 → 2024 | 0.418 | 0.638 | 0.635 | 0.593 | 0.683 |
+| Tanzania 2024 → 2022 | 0.332 | 0.692 | 0.693 | 0.626 | 0.708 |
+| Colombia 2021 → 2022 | 0.298 | 0.357 | 0.358 | 0.334 | 0.488 |
+| Colombia 2022 → 2021 | 0.334 | 0.475 | 0.476 | 0.445 | 0.498 |
+
+The offset recovers most of the temporal loss in Tanzania and in Colombia 2022 → 2021, but only about a third of it in
+Colombia 2021 → 2022. Dropping dimensions does worse than the offset and costs in-year R² (up to 0.04); combining both
+adds nothing over the offset. The label-free offset matches the stable-cell offset to within 0.003 R².
+
+Caveats for this section:
+- The offset still uses the target year's embeddings on the training blocks. `offset` also uses target-year heights there.
+- Averaging over all paired cells would absorb any real site-wide height change. Mean Δh is small at both sites
+  (Tanzania −0.18 m), which is why `offset_all` matches `offset` here. This is not a guarantee elsewhere, and the
+  offset is unsuitable for estimating trends; use stable anchors for that.
+- Scores are R² against observed height only. Whether predicted change matches observed change per cell is not tested.
+- One partition and seed, two sites; k = 8/20/32 and the 1 m stable threshold were fixed in advance, not tuned.
+- The Colombia baselines here use all cells of the test year (`full`/`main` E4 variants), not the `matched` cells of the
+  table above, so they are not directly comparable to it.
+
 ## Caveats
 
 - **Cells.** `pipeline.cells: covered` keeps only cells with Tessera data, identically for every feature set. About 18–21 %
